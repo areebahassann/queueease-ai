@@ -117,11 +117,25 @@ SERVICES = [
 ]
 
 def keyword_match(user_text: str):
-    """Very light rule-based fallback classifier (no API needed)."""
-    text = user_text.lower()
+    """Rule-based fallback classifier (no API needed). Uses forgiving
+    word-overlap scoring instead of rigid substring matching, so phrases
+    like 'renew my father's CNIC' still match 'cnic renewal' keywords even
+    though the words appear in a different order."""
+    text_words = set(user_text.lower().replace("'", "").split())
     best, best_score = None, 0
     for svc in SERVICES:
-        score = sum(1 for kw in svc["keywords"] if kw.lower() in text)
+        score = 0
+        for kw in svc["keywords"]:
+            kw_lower = kw.lower()
+            if kw_lower in user_text.lower():
+                score += 3  # exact phrase match — strong signal
+            else:
+                kw_words = set(kw_lower.replace("'", "").split())
+                overlap = len(kw_words & text_words)
+                if overlap >= 1 and overlap == len(kw_words):
+                    score += 2  # all keyword words present, different order
+                elif overlap >= 1:
+                    score += overlap * 0.5  # partial word overlap
         if score > best_score:
             best, best_score = svc, score
-    return best
+    return best if best_score >= 1 else None
